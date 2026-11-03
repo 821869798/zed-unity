@@ -624,11 +624,22 @@ namespace Unifan.Zed.Editor
 			line = Math.Max(1, line);
 			column = Math.Max(1, column);
 
-			var directory = IOPath.GetDirectoryName(solution)?.NormalizePathSeparators();
-			var normalizedPath = string.IsNullOrEmpty(path) ? string.Empty : path.NormalizePathSeparators();
+			var rawDirectory = IOPath.GetDirectoryName(solution);
+			var directory = string.IsNullOrEmpty(rawDirectory)
+				? IOPath.GetFullPath(IOPath.Combine(Application.dataPath, "..")).NormalizePathSeparators()
+				: IOPath.GetFullPath(rawDirectory).NormalizePathSeparators();
 
-			// Always pass the project directory first so Zed uses it as the workspace root,
-			// followed by the file:line:column target.
+			var normalizedPath = string.Empty;
+			if (!string.IsNullOrEmpty(path))
+			{
+				var fullPath = IOPath.IsPathRooted(path)
+					? IOPath.GetFullPath(path)
+					: IOPath.GetFullPath(IOPath.Combine(directory, path));
+				normalizedPath = fullPath.NormalizePathSeparators();
+			}
+
+			// Always pass the absolute project directory first so Zed uses it as the workspace root,
+			// followed by the absolute file:line:column target with matching native separators.
 			var arguments = string.IsNullOrEmpty(normalizedPath)
 				? $"\"{directory}\""
 				: $"\"{directory}\" \"{normalizedPath}:{line}:{column}\"";
