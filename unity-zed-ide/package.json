@@ -7,5 +7,10 @@
   "dependencies": {},
   "author": {
     "name": "Unifan"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/821869798/zed-unity.git",
+    "directory": "unity-zed-ide"
   }
 }

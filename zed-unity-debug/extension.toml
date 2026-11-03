@@ -4,7 +4,7 @@ version = "0.1.0"
 schema_version = 1
 authors = ["Unifan"]
 description = "Debug Unity C# applications directly inside Zed via DAP"
-repository = "https://github.com/your-username/zed-unity"
+repository = "https://github.com/821869798/zed-unity"
 
 [debug_adapters.unity]
 schema_path = "debug_adapter_schemas/unity.json"

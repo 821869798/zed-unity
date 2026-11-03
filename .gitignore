@@ -5,6 +5,8 @@
 **/target/
 **/*.rs.bk
 Cargo.lock
+extension.wasm
+*.wasm
 
 # C# / Unity / .NET
 **/[Bb]in/
