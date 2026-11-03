@@ -45,6 +45,28 @@ namespace Unifan.Zed.Editor
 
 		private static string GetExtensionPath()
 		{
+			// 1. Check Zed's own extension work directory (populated automatically by zed-unity-debug)
+			var zedWorkExtensionDirs = new List<string>();
+#if UNITY_EDITOR_WIN
+			var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+			if (!string.IsNullOrEmpty(localAppData))
+				zedWorkExtensionDirs.Add(IOPath.Combine(localAppData, "Zed", "extensions", "work", "unity-debugger", "adapter", "extension"));
+#elif UNITY_EDITOR_OSX
+			var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			if (!string.IsNullOrEmpty(home))
+				zedWorkExtensionDirs.Add(IOPath.Combine(home, "Library", "Application Support", "Zed", "extensions", "work", "unity-debugger", "adapter", "extension"));
+#else
+			var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			if (!string.IsNullOrEmpty(home))
+				zedWorkExtensionDirs.Add(IOPath.Combine(home, ".local", "share", "zed", "extensions", "work", "unity-debugger", "adapter", "extension"));
+#endif
+			foreach (var zedExtDir in zedWorkExtensionDirs)
+			{
+				if (Directory.Exists(zedExtDir))
+					return zedExtDir;
+			}
+
+			// 2. Fallback: Reuse existing local VS Code / Cursor / Trae / Windsurf vstuc installation if present
 			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 			if (string.IsNullOrEmpty(userProfile))
 				return null;
