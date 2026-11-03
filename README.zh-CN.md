@@ -35,9 +35,9 @@
 
 ### 2. 配置 Unity 外部编辑器
 1. 打开 Unity 菜单 **Edit > Preferences > External Tools**。
-2. 在 **External Script Editor** 下拉列表中选择 **`Zed [版本号]`**（插件会自动探测你安装的 Zed 或 Zed Preview）。
+2. 在 **External Script Editor** 下拉列表中选择 **`Zed [版本号]`** 或 **`Wu [版本号]`**（插件会自动探测你安装的 Zed、Zed Preview 以及 [Wu](https://github.com/dstrml/wu)）。
 3. 推荐勾选 **Embedded packages** 和 **Local packages**。
-4. 在 Project 窗口双击任意 C# 脚本，Unity 将自动调用 Zed 并打开脚本，同时生成干净轻量的 SDK-style `.csproj`、统一的 `.sln` 以及自动配置好的 `.zed` 环境。
+4. 在 Project 窗口双击任意 C# 脚本，Unity 将自动调用编辑器并打开脚本，同时生成干净轻量的 SDK-style `.csproj`、统一的 `.sln` 以及自动配置好的 `.zed` / `.wu` 环境。
 
 ### 3. 安装 Zed 扩展
 1. 在 Zed 中打开扩展中心，安装官方 **`C#`** 扩展（提供 Roslyn 语法高亮、代码补全与跨文件跳转）。

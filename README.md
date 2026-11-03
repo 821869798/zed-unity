@@ -33,11 +33,11 @@ In your Unity Editor:
 
 *(Alternatively, add `"com.unifan.ide.zed": "https://github.com/821869798/zed-unity.git?path=/unity-zed-ide"` to your `Packages/manifest.json`)*
 
-### 2. Set Zed as External Script Editor
+### 2. Set Zed / Wu as External Script Editor
 1. In Unity, go to **Edit > Preferences > External Tools**.
-2. Under **External Script Editor**, select **`Zed [Version]`** (auto-detected).
+2. Under **External Script Editor**, select **`Zed [Version]`** or **`Wu [Version]`** (auto-detected across Windows, macOS, and Linux for Zed, Zed Preview, and [Wu](https://github.com/dstrml/wu)).
 3. Recommended: check **Embedded packages** and **Local packages**.
-4. Double-click any C# script in Unity. Unity will launch Zed and automatically generate clean SDK-style `.csproj` files, a unified `.sln`, and `.zed` configurations.
+4. Double-click any C# script in Unity. Unity will launch your editor and automatically generate clean SDK-style `.csproj` files, a unified `.sln`, and `.zed` / `.wu` configurations.
 
 ### 3. Install Zed Extensions
 1. In Zed, open Extensions and install the official **`C#`** extension (provides Roslyn completion, diagnostics, and code navigation).

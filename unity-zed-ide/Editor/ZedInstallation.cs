@@ -45,25 +45,49 @@ namespace Unifan.Zed.Editor
 
 		private static string GetExtensionPath()
 		{
-			// 1. Check Zed's own extension work directory (populated automatically by zed-unity-debug)
-			var zedWorkExtensionDirs = new List<string>();
+			// 1. Check Zed's and Wu's own extension work directories (populated automatically by zed-unity-debug)
+			var editorWorkExtensionDirs = new List<string>();
 #if UNITY_EDITOR_WIN
 			var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 			if (!string.IsNullOrEmpty(localAppData))
-				zedWorkExtensionDirs.Add(IOPath.Combine(localAppData, "Zed", "extensions", "work", "unity-debugger", "adapter", "extension"));
+			{
+				foreach (var app in new[] { "Zed", "Wu" })
+				{
+					foreach (var extId in new[] { "unity-debug", "unity-debugger" })
+					{
+						editorWorkExtensionDirs.Add(IOPath.Combine(localAppData, app, "extensions", "work", extId, "adapter", "extension"));
+					}
+				}
+			}
 #elif UNITY_EDITOR_OSX
 			var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 			if (!string.IsNullOrEmpty(home))
-				zedWorkExtensionDirs.Add(IOPath.Combine(home, "Library", "Application Support", "Zed", "extensions", "work", "unity-debugger", "adapter", "extension"));
+			{
+				foreach (var app in new[] { "Zed", "Wu" })
+				{
+					foreach (var extId in new[] { "unity-debug", "unity-debugger" })
+					{
+						editorWorkExtensionDirs.Add(IOPath.Combine(home, "Library", "Application Support", app, "extensions", "work", extId, "adapter", "extension"));
+					}
+				}
+			}
 #else
 			var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 			if (!string.IsNullOrEmpty(home))
-				zedWorkExtensionDirs.Add(IOPath.Combine(home, ".local", "share", "zed", "extensions", "work", "unity-debugger", "adapter", "extension"));
-#endif
-			foreach (var zedExtDir in zedWorkExtensionDirs)
 			{
-				if (Directory.Exists(zedExtDir))
-					return zedExtDir;
+				foreach (var app in new[] { "zed", "wu" })
+				{
+					foreach (var extId in new[] { "unity-debug", "unity-debugger" })
+					{
+						editorWorkExtensionDirs.Add(IOPath.Combine(home, ".local", "share", app, "extensions", "work", extId, "adapter", "extension"));
+					}
+				}
+			}
+#endif
+			foreach (var extDir in editorWorkExtensionDirs)
+			{
+				if (Directory.Exists(extDir))
+					return extDir;
 			}
 
 			// 2. Fallback: Reuse existing local VS Code / Cursor / Trae / Windsurf vstuc installation if present
@@ -102,19 +126,43 @@ namespace Unifan.Zed.Editor
 		public override IGenerator ProjectGenerator => _generator;
 #endif
 
+		private static bool IsWuInstallation(string path)
+		{
+			if (string.IsNullOrEmpty(path))
+				return false;
+
+			var fileName = IOPath.GetFileName(path);
+			if (Regex.IsMatch(fileName, @"\bwu\b", RegexOptions.IgnoreCase) || fileName.StartsWith("wu", StringComparison.OrdinalIgnoreCase))
+				return true;
+
+			var dir = IOPath.GetDirectoryName(path);
+			while (!string.IsNullOrEmpty(dir))
+			{
+				var dirName = IOPath.GetFileName(dir);
+				if (string.Equals(dirName, "Wu", StringComparison.OrdinalIgnoreCase))
+					return true;
+
+				dir = IOPath.GetDirectoryName(dir);
+				if (string.Equals(dirName, "Programs", StringComparison.OrdinalIgnoreCase) || string.Equals(dirName, "Applications", StringComparison.OrdinalIgnoreCase))
+					break;
+			}
+
+			return false;
+		}
+
 		private static bool IsCandidateForDiscovery(string path)
 		{
 			if (string.IsNullOrEmpty(path))
 				return false;
 
 #if UNITY_EDITOR_OSX
-			if (Directory.Exists(path) && Regex.IsMatch(path, @".*Zed.*\.app$", RegexOptions.IgnoreCase))
+			if (Directory.Exists(path) && Regex.IsMatch(path, @".*(Zed|Wu).*\.app$", RegexOptions.IgnoreCase))
 				return true;
-			return File.Exists(path) && Regex.IsMatch(IOPath.GetFileName(path), @"^(zed|cli)$", RegexOptions.IgnoreCase);
+			return File.Exists(path) && Regex.IsMatch(IOPath.GetFileName(path), @"^(zed|wu|cli)$", RegexOptions.IgnoreCase);
 #elif UNITY_EDITOR_WIN
-			return File.Exists(path) && Regex.IsMatch(IOPath.GetFileName(path), @"^zed.*\.exe$", RegexOptions.IgnoreCase);
+			return File.Exists(path) && Regex.IsMatch(IOPath.GetFileName(path), @"^(zed|wu).*\.exe$", RegexOptions.IgnoreCase);
 #else
-			return File.Exists(path) && Regex.IsMatch(IOPath.GetFileName(path), @"^(zed|zeditor|dev\.zed\.Zed)$", RegexOptions.IgnoreCase);
+			return File.Exists(path) && Regex.IsMatch(IOPath.GetFileName(path), @"^(zed|zeditor|wu|dev\.zed\.Zed)$", RegexOptions.IgnoreCase);
 #endif
 		}
 
@@ -130,6 +178,8 @@ namespace Unifan.Zed.Editor
 
 			Version version = null;
 			var isPrerelease = editorPath.IndexOf("preview", StringComparison.OrdinalIgnoreCase) >= 0;
+			var isWu = IsWuInstallation(editorPath);
+			var baseName = isWu ? "Wu" : "Zed";
 
 			try
 			{
@@ -150,7 +200,7 @@ namespace Unifan.Zed.Editor
 			installation = new ZedInstallation()
 			{
 				IsPrerelease = isPrerelease,
-				Name = "Zed" + (isPrerelease ? " Preview" : string.Empty) + (version != null ? $" [{version.ToString(3)}]" : string.Empty),
+				Name = baseName + (isPrerelease ? " Preview" : string.Empty) + (version != null ? $" [{version.ToString(3)}]" : string.Empty),
 				Path = editorPath,
 				Version = version ?? new Version()
 			};
@@ -172,9 +222,19 @@ namespace Unifan.Zed.Editor
 				var parentDir = IOPath.GetDirectoryName(dir);
 				if (!string.IsNullOrEmpty(parentDir))
 				{
-					var mainExe = IOPath.Combine(parentDir, "Zed.exe");
-					if (File.Exists(mainExe))
-						targetExe = mainExe;
+					var exeName = IOPath.GetFileName(exePath);
+					var candidate = IOPath.Combine(parentDir, exeName);
+					if (File.Exists(candidate))
+					{
+						targetExe = candidate;
+					}
+					else
+					{
+						var isWu = IsWuInstallation(exePath);
+						var fallback = IOPath.Combine(parentDir, isWu ? "Wu.exe" : "Zed.exe");
+						if (File.Exists(fallback))
+							targetExe = fallback;
+					}
 				}
 			}
 
@@ -238,6 +298,16 @@ namespace Unifan.Zed.Editor
 
 				candidates.Add(IOPath.Combine(basePath, "Zed", "Zed.exe"));
 				candidates.Add(IOPath.Combine(basePath, "Zed Preview", "Zed.exe"));
+				candidates.Add(IOPath.Combine(basePath, "Wu", "Wu.exe"));
+				candidates.Add(IOPath.Combine(basePath, "Wu", "bin", "wu.exe"));
+				candidates.Add(IOPath.Combine(basePath, "Wu Preview", "Wu.exe"));
+			}
+
+			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+			if (!string.IsNullOrEmpty(userProfile))
+			{
+				candidates.Add(IOPath.Combine(userProfile, ".cargo", "bin", "wu.exe"));
+				candidates.Add(IOPath.Combine(userProfile, ".cargo", "bin", "zed.exe"));
 			}
 #elif UNITY_EDITOR_OSX
 			var appPaths = new[]
@@ -254,6 +324,7 @@ namespace Unifan.Zed.Editor
 				try
 				{
 					candidates.AddRange(Directory.EnumerateDirectories(appPath, "Zed*.app"));
+					candidates.AddRange(Directory.EnumerateDirectories(appPath, "Wu*.app"));
 				}
 				catch
 				{
@@ -263,12 +334,19 @@ namespace Unifan.Zed.Editor
 #elif UNITY_EDITOR_LINUX
 			var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 			if (!string.IsNullOrEmpty(userProfile))
+			{
 				candidates.Add(IOPath.Combine(userProfile, ".local", "bin", "zed"));
+				candidates.Add(IOPath.Combine(userProfile, ".local", "bin", "wu"));
+				candidates.Add(IOPath.Combine(userProfile, ".cargo", "bin", "wu"));
+				candidates.Add(IOPath.Combine(userProfile, ".cargo", "bin", "zed"));
+			}
 
 			candidates.Add("/usr/bin/zed");
 			candidates.Add("/usr/bin/zeditor");
+			candidates.Add("/usr/bin/wu");
 			candidates.Add("/usr/local/bin/zed");
 			candidates.Add("/usr/local/bin/zeditor");
+			candidates.Add("/usr/local/bin/wu");
 			candidates.Add("/var/lib/flatpak/exports/bin/dev.zed.Zed");
 			candidates.Add("/var/lib/flatpak/app/dev.zed.Zed/current/active/files/bin/zed");
 			candidates.Add("/run/current-system/sw/bin/zeditor");
@@ -345,13 +423,24 @@ namespace Unifan.Zed.Editor
 		{
 			try
 			{
-				var zedDirectory = IOPath.Combine(projectDirectory.NormalizePathSeparators(), ".zed");
-				Directory.CreateDirectory(zedDirectory);
+				var normalizedProjectDir = projectDirectory.NormalizePathSeparators();
+				var targetDirs = new List<string> { IOPath.Combine(normalizedProjectDir, ".zed") };
 
-				var enablePatch = !File.Exists(IOPath.Combine(zedDirectory, ".zedpatchdisable"));
+				var wuDir = IOPath.Combine(normalizedProjectDir, ".wu");
+				if (Directory.Exists(wuDir) || IsWuInstallation(Path))
+				{
+					targetDirs.Add(wuDir);
+				}
 
-				CreateSettingsFile(zedDirectory, enablePatch);
-				CreateDebugFile(zedDirectory, enablePatch);
+				foreach (var dir in targetDirs)
+				{
+					Directory.CreateDirectory(dir);
+					var enablePatch = !File.Exists(IOPath.Combine(dir, ".zedpatchdisable"))
+						&& !File.Exists(IOPath.Combine(dir, ".wupatchdisable"));
+
+					CreateSettingsFile(dir, enablePatch);
+					CreateDebugFile(dir, enablePatch);
+				}
 			}
 			catch (IOException)
 			{
@@ -593,21 +682,31 @@ namespace Unifan.Zed.Editor
 		private static string ResolveLaunchExecutable(string application)
 		{
 #if UNITY_EDITOR_WIN
-			// Prefer Zed\bin\Zed.exe CLI launcher if available, as it handles workspace + file:line:col cleanly
+			// Prefer bin\Zed.exe or bin\wu.exe CLI launcher if available, as it handles workspace + file:line:col cleanly
 			var dir = IOPath.GetDirectoryName(application);
 			if (!string.IsNullOrEmpty(dir) && !string.Equals(IOPath.GetFileName(dir), "bin", StringComparison.OrdinalIgnoreCase))
 			{
-				var cliCandidate = IOPath.Combine(dir, "bin", "Zed.exe");
+				var appExeName = IOPath.GetFileName(application);
+				var cliCandidate = IOPath.Combine(dir, "bin", appExeName);
 				if (File.Exists(cliCandidate))
 					return cliCandidate;
+
+				var isWu = IsWuInstallation(application);
+				var fallbackCli = IOPath.Combine(dir, "bin", isWu ? "wu.exe" : "Zed.exe");
+				if (File.Exists(fallbackCli))
+					return fallbackCli;
 			}
 #elif UNITY_EDITOR_OSX
-			// If application is /Applications/Zed.app, prefer Contents/MacOS/cli to reuse existing window cleanly
+			// If application is /Applications/Zed.app or /Applications/Wu.app, prefer Contents/MacOS/cli to reuse existing window cleanly
 			if (Directory.Exists(application))
 			{
 				var cliCandidate = IOPath.Combine(application, "Contents", "MacOS", "cli");
 				if (File.Exists(cliCandidate))
 					return cliCandidate;
+
+				var wuCandidate = IOPath.Combine(application, "Contents", "MacOS", "wu");
+				if (File.Exists(wuCandidate))
+					return wuCandidate;
 
 				var zedCandidate = IOPath.Combine(application, "Contents", "MacOS", "zed");
 				if (File.Exists(zedCandidate))
@@ -651,7 +750,7 @@ namespace Unifan.Zed.Editor
 			// is created (~400ms), before the background worktree scan of "<directory>"
 			// completes (~600ms). Waiting briefly before sending "<file:line:col>" ensures
 			// Zed opens the file inside the folder workspace rather than attaching a second root.
-			var isZedRunning = IsZedProcessRunning();
+			var isRunning = IsEditorProcessRunning(application);
 			System.Threading.Tasks.Task.Run(() =>
 			{
 				try
@@ -666,19 +765,35 @@ namespace Unifan.Zed.Editor
 					// ignore and proceed to open file
 				}
 
-				System.Threading.Thread.Sleep(isZedRunning ? 200 : 1500);
+				System.Threading.Thread.Sleep(isRunning ? 200 : 1500);
 				ProcessRunner.Start(ProcessStartInfoFor(application, $"\"{normalizedPath}:{line}:{column}\""));
 			});
 
 			return true;
 		}
 
-		private static bool IsZedProcessRunning()
+		private static bool IsEditorProcessRunning(string application)
 		{
 			try
 			{
-				return Process.GetProcessesByName("Zed").Length > 0
-					|| Process.GetProcessesByName("zed").Length > 0;
+				var processNames = new List<string> { "Zed", "zed", "Wu", "wu" };
+				var appName = IOPath.GetFileNameWithoutExtension(application);
+				if (!string.IsNullOrEmpty(appName))
+				{
+					processNames.Add(appName);
+				}
+
+				return processNames.Distinct().Any(name =>
+				{
+					try
+					{
+						return Process.GetProcessesByName(name).Length > 0;
+					}
+					catch
+					{
+						return false;
+					}
+				});
 			}
 			catch
 			{

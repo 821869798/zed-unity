@@ -1,8 +1,8 @@
 {
   "name": "com.unifan.ide.zed",
   "displayName": "Zed Editor",
-  "description": "Code editor integration for supporting Zed as code editor for Unity. Based on com.unity.ide.visualstudio@2.0.29, adds support for SDK-style csproj generation, Unity Roslyn analyzers, MSBuild pipeline integration, auto discovery of Zed installations, and automatic .zed/settings.json & .zed/debug.json generation.",
-  "version": "1.0.0",
+  "description": "Code editor integration for supporting Zed and Wu (Zed fork) as code editor for Unity. Based on com.unity.ide.visualstudio@2.0.29, adds support for SDK-style csproj generation, Unity Roslyn analyzers, MSBuild pipeline integration, auto discovery of Zed & Wu installations, and automatic .zed/.wu settings & debug configurations.",
+  "version": "1.0.1",
   "unity": "2021.3",
   "dependencies": {},
   "author": {

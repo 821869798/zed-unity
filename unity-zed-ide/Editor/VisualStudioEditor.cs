@@ -54,7 +54,7 @@ namespace Unifan.Zed.Editor
 			}
 			catch (Exception ex)
 			{
-				Debug.LogError($"Error detecting Zed installations: {ex}");
+				Debug.LogError($"Error detecting Zed/Wu installations: {ex}");
 				return new Dictionary<string, IVisualStudioInstallation>();
 			}
 		}

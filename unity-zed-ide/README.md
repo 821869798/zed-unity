@@ -4,9 +4,9 @@
   <strong>English</strong> | <a href="README.zh-CN.md">简体中文</a>
 </p>
 
-A specialized Unity Editor integration package (UPM Package) for seamless C# development in **Zed Editor**.
+A specialized Unity Editor integration package (UPM Package) for seamless C# development in **Zed Editor** and **Wu** (the fast native Zed fork).
 
-Built upon Unity's official `com.unity.ide.visualstudio@2.0.29` architecture, completely refactored and tailored for Zed's Roslyn language server and workspace mechanics.
+Built upon Unity's official `com.unity.ide.visualstudio@2.0.29` architecture, completely refactored and tailored for Zed/Wu's Roslyn language server and workspace mechanics.
 
 ---
 
@@ -50,24 +50,26 @@ Add the dependency directly into your project's `Packages/manifest.json`:
 ## 🚀 Usage
 
 1. Open Unity **Edit > Preferences > External Tools**.
-2. Under **External Script Editor**, select **`Zed [Version]`** (auto-detected).
+2. Under **External Script Editor**, select **`Zed [Version]`** or **`Wu [Version]`** (auto-detected).
 3. Check the desired project generation boxes (**Embedded packages** and **Local packages** recommended).
-4. Double-click any C# script in Unity. Zed will launch with complete cross-file navigation and debugging configuration ready to go.
+4. Double-click any C# script in Unity. Your editor will launch with complete cross-file navigation and debugging configuration ready to go.
 
 ---
 
 ## 🔍 Key Features
 
+- **Multi-Editor Auto-Discovery**:
+  - Automatically discovers installations of Zed, Zed Preview, and [Wu](https://github.com/dstrml/wu) across Windows, macOS, and Linux without manual browsing.
 - **Modern SDK-Style Project Generation**:
   - Generates clean, lightweight, and modern SDK-style `.csproj` files with full support for `<Nullable>enable</Nullable>`, C# 11~13 features, and Unity MSBuild pipelines.
 - **First-Class Roslyn Language Server Support**:
-  - Automatically maintains a single authoritative `.sln` file and purges conflicting `.slnx` files to ensure Zed's C# extension mounts all 50+ project assemblies cleanly.
+  - Automatically maintains a single authoritative `.sln` file and purges conflicting `.slnx` files to ensure Roslyn language server mounts all project assemblies cleanly.
   - Automatically scans and injects official Unity Roslyn Analyzers (`Microsoft.Unity.Analyzers.dll`) and source generators (`Unity.SourceGenerators.dll`).
 - **Cold-Start Launch Timing Protection**:
-  - Fixes the issue where Zed 1.26+ CLI calls with both `<folder>` and `<file:line:col>` attach the file as an isolated single-file worktree.
-  - Detects cold starts: launches the root workspace folder first, waits 1.5 seconds for Zed's background worktree scanner to index project files, and then navigates to the target file and line.
-- **Automated `.zed` Workspace Configurations**:
-  - Automatically generates `.zed/settings.json` (excluding `Library/`, `Temp/`, `Logs/`, configuring Unity file associations, and locking the active solution).
-  - Automatically generates `.zed/debug.json` with zero-config `Attach to Unity Editor`.
+  - Fixes the issue where Zed/Wu CLI calls with both `<folder>` and `<file:line:col>` attach the file as an isolated single-file worktree.
+  - Detects cold starts: launches the root workspace folder first, waits 1.5 seconds for the background worktree scanner to index project files, and then navigates to the target file and line.
+- **Automated Workspace Configurations**:
+  - Automatically generates `.zed` and `.wu` `settings.json` (excluding `Library/`, `Temp/`, `Logs/`, configuring Unity file associations, and locking the active solution).
+  - Automatically generates `.zed` and `.wu` `debug.json` with zero-config `Attach to Unity Editor`.
 - **Clean Coexistence**:
   - Uses independent namespace `Unifan.Zed.Editor` and unique GUIDs, safely coexisting with Unity's built-in `com.unity.ide.visualstudio`.
