@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use serde_json::{Value, json};
 use zed_extension_api::{
     self as zed,
@@ -126,20 +127,25 @@ impl UnityDebuggerExtension {
             for ide_dir in ide_dirs {
                 let ext_base = format!("{}\\{}\\extensions", home, ide_dir);
                 let pattern = format!("{}\\visualstudiotoolsforunity.vstuc*", ext_base);
-                let output = Command::new("cmd")
+                let Ok(output) = Command::new("cmd")
                     .args(["/c", "dir", "/b", "/ad", "/o-n", &pattern])
                     .output()
-                    .ok()?;
+                else {
+                    continue;
+                };
+
+                if output.status != Some(0) {
+                    continue;
+                }
 
                 let stdout = String::from_utf8_lossy(&output.stdout);
-                if let Some(first_dir) = stdout.lines().map(str::trim).find(|l| !l.is_empty()) {
-                    let dll_path = format!("{}\\{}\\bin\\UnityDebugAdapter.dll", ext_base, first_dir);
-                    let check = Command::new("cmd")
-                        .args(["/c", "if", "exist", &dll_path, "echo", "FOUND"])
-                        .output()
-                        .ok()?;
-                    if String::from_utf8_lossy(&check.stdout).contains("FOUND") {
-                        return Some(dll_path);
+                for dir_name in stdout.lines().map(str::trim).filter(|l| !l.is_empty()) {
+                    let dll_path = format!("{}\\{}\\bin\\UnityDebugAdapter.dll", ext_base, dir_name);
+                    let check_cmd = format!("if exist \"{}\" echo FOUND", dll_path);
+                    if let Ok(check) = Command::new("cmd").args(["/c", &check_cmd]).output() {
+                        if String::from_utf8_lossy(&check.stdout).contains("FOUND") {
+                            return Some(dll_path);
+                        }
                     }
                 }
             }
@@ -155,69 +161,132 @@ impl UnityDebuggerExtension {
                 ide_dirs.join(" "),
                 home
             );
-            let output = Command::new("/bin/sh").args(["-c", &script]).output().ok()?;
-            let found = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !found.is_empty() {
-                return Some(found);
+            if let Ok(output) = Command::new("/bin/sh").args(["-c", &script]).output() {
+                let found = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                if !found.is_empty() {
+                    return Some(found);
+                }
             }
         }
 
         None
     }
 
-    /// Discovers the Unity Editor Mono Soft Debugger endpoint (`127.0.0.1:<port>`).
-    /// Priority:
-    /// 1. Reads `{project_root}/Library/EditorInstance.json` to get the exact `process_id`
-    ///    of the Unity Editor running THIS project, and calculates `56000 + (process_id % 1000)`.
-    ///    This guarantees attaching to the right Unity Editor even when multiple Unity instances are open.
-    /// 2. Falls back to scanning listening TCP ports in `56000..=56999` via `lsof` / `netstat`.
-    fn discover_unity_port(&self, worktree: &Worktree, is_windows: bool) -> Result<String, String> {
-        if let Some(port) = self.discover_port_from_editor_instance(worktree, is_windows) {
-            return Ok(format!("127.0.0.1:{}", port));
+    fn find_dotnet(&self, worktree: &Worktree, is_windows: bool) -> Result<String, String> {
+        if let Some(dotnet) = worktree.which("dotnet") {
+            return Ok(dotnet);
         }
 
-        let err = "Unity debugger not running. \
-                   Make sure Unity Editor is open with this project and Debug code optimization is enabled.";
+        if is_windows {
+            let candidates = [
+                "C:\\Program Files\\dotnet\\dotnet.exe",
+                "C:\\Program Files (x86)\\dotnet\\dotnet.exe",
+            ];
+            for candidate in candidates {
+                let check_cmd = format!("if exist \"{}\" echo FOUND", candidate);
+                if let Ok(out) = Command::new("cmd").args(["/c", &check_cmd]).output() {
+                    if String::from_utf8_lossy(&out.stdout).contains("FOUND") {
+                        return Ok(candidate.to_string());
+                    }
+                }
+            }
+        } else {
+            let candidates = [
+                "/usr/local/share/dotnet/dotnet",
+                "/opt/homebrew/bin/dotnet",
+                "/usr/share/dotnet/dotnet",
+                "/usr/bin/dotnet",
+            ];
+            for candidate in candidates {
+                if let Ok(out) = Command::new("/bin/sh")
+                    .args(["-c", &format!("[ -x \"{}\" ] && echo FOUND", candidate)])
+                    .output()
+                {
+                    if String::from_utf8_lossy(&out.stdout).contains("FOUND") {
+                        return Ok(candidate.to_string());
+                    }
+                }
+            }
+        }
+
+        Err(
+            ".NET runtime (`dotnet`) not found on PATH. \
+             Install .NET 9/10 or later from https://dotnet.microsoft.com/download."
+                .to_string(),
+        )
+    }
+
+    /// Discovers the Unity Editor Mono Soft Debugger endpoint (`127.0.0.1:<port>`).
+    /// 1. Collects all currently listening TCP ports in `56000..=56999`.
+    /// 2. Reads `{project_root}/Library/EditorInstance.json` to get the exact `process_id`
+    ///    of the Unity Editor running THIS project (`56000 + (process_id % 1000)`).
+    /// 3. If the project's exact port is listening, uses it; otherwise falls back to the first
+    ///    listening `56xxx` port.
+    fn discover_unity_port(&self, worktree: &Worktree, is_windows: bool) -> Result<String, String> {
+        let listening_ports = self.list_listening_unity_ports(worktree, is_windows);
+        let editor_port = self.discover_port_from_editor_instance(worktree, is_windows);
+
+        if let Some(expected_port) = editor_port {
+            if listening_ports.is_empty() || listening_ports.contains(&expected_port) {
+                return Ok(format!("127.0.0.1:{}", expected_port));
+            }
+        }
+
+        if let Some(first_port) = listening_ports.first() {
+            return Ok(format!("127.0.0.1:{}", first_port));
+        }
+
+        Err(
+            "Unity debugger not running (no listening port found in 56000-56999). \
+             Make sure Unity Editor is open with this project and 'Editor Attaching' is enabled."
+                .to_string(),
+        )
+    }
+
+    fn list_listening_unity_ports(&self, worktree: &Worktree, is_windows: bool) -> Vec<u32> {
+        let mut ports = Vec::new();
 
         if !is_windows && worktree.which("lsof").is_some() {
-            // macOS and Linux: list TCP ports in Unity's SDB range that are LISTEN
-            let output = Command::new("/bin/sh")
+            if let Ok(output) = Command::new("/bin/sh")
                 .args([
                     "-c",
                     "lsof -nP -i TCP:56000-56999 2>/dev/null \
-                     | grep LISTEN | awk '{print $9}' | grep -oE '[0-9]+$' | head -1",
+                     | grep LISTEN | awk '{print $9}' | grep -oE '[0-9]+$'",
                 ])
                 .output()
-                .map_err(|e| format!("Failed to run Unity port discovery: {}", e))?;
-            let port = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !port.is_empty() {
-                return Ok(format!("127.0.0.1:{}", port));
+            {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    if let Ok(p) = line.trim().parse::<u32>() {
+                        if (56000..=56999).contains(&p) && !ports.contains(&p) {
+                            ports.push(p);
+                        }
+                    }
+                }
             }
         } else {
-            // Windows: run netstat and filter in Rust to avoid shell quoting issues
-            let output = Command::new("cmd")
-                .args(["/c", "netstat -an"])
-                .output()
-                .map_err(|e| format!("Failed to run Unity port discovery: {}", e))?;
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                // Format: "  TCP    127.0.0.1:56716    0.0.0.0:0    LISTENING"
-                if !line.contains("LISTENING") {
-                    continue;
-                }
-                if let Some(port) = line
-                    .split_whitespace()
-                    .nth(1)
-                    .and_then(|addr| addr.rsplit_once(':'))
-                    .map(|(_, p)| p.trim())
-                    .filter(|p| p.len() == 5 && p.starts_with("56"))
-                {
-                    return Ok(format!("127.0.0.1:{}", port));
+            if let Ok(output) = Command::new("cmd").args(["/c", "netstat -an"]).output() {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                for line in stdout.lines() {
+                    if !line.contains("LISTENING") {
+                        continue;
+                    }
+                    if let Some(port) = line
+                        .split_whitespace()
+                        .nth(1)
+                        .and_then(|addr| addr.rsplit_once(':'))
+                        .and_then(|(_, p)| p.trim().parse::<u32>().ok())
+                        .filter(|p| (56000..=56999).contains(p))
+                    {
+                        if !ports.contains(&port) {
+                            ports.push(port);
+                        }
+                    }
                 }
             }
         }
 
-        Err(err.to_string())
+        ports
     }
 
     fn discover_port_from_editor_instance(
@@ -262,6 +331,17 @@ impl UnityDebuggerExtension {
         Some(56000 + (pid % 1000))
     }
 
+    fn resolve_project_path(raw_project_path: Option<&str>, worktree_root: &str) -> String {
+        match raw_project_path.map(str::trim) {
+            None | Some("") | Some(".") | Some("${ZED_WORKTREE_ROOT}") | Some("${workspaceFolder}") => {
+                worktree_root.to_string()
+            }
+            Some(custom) => custom
+                .replace("${ZED_WORKTREE_ROOT}", worktree_root)
+                .replace("${workspaceFolder}", worktree_root),
+        }
+    }
+
     fn build_config(
         &self,
         raw_config: &str,
@@ -286,11 +366,11 @@ impl UnityDebuggerExtension {
                 obj.remove("endPoint");
             }
         } else {
-            // VSTU adapter (.dll) expects a combined "endPoint" string
+            // VSTU adapter (UnityDebugAdapter.dll) expects "endPoint" and a resolved "projectPath"
             cfg["endPoint"] = json!(endpoint);
-            if cfg.get("projectPath").is_none() || cfg["projectPath"] == json!(null) {
-                cfg["projectPath"] = json!(project_path);
-            }
+            let resolved_project_path =
+                Self::resolve_project_path(cfg.get("projectPath").and_then(|v| v.as_str()), project_path);
+            cfg["projectPath"] = json!(resolved_project_path);
         }
 
         if let Some(obj) = cfg.as_object_mut() {
@@ -343,11 +423,7 @@ impl zed::Extension for UnityDebuggerExtension {
             })?;
             (mono, true)
         } else {
-            let dotnet = worktree.which("dotnet").ok_or_else(|| {
-                ".NET runtime (`dotnet`) not found on PATH. \
-                 Install .NET 8 or later from https://dotnet.microsoft.com/download."
-                    .to_string()
-            })?;
+            let dotnet = self.find_dotnet(worktree, is_windows)?;
             (dotnet, true)
         };
 
@@ -372,14 +448,25 @@ impl zed::Extension for UnityDebuggerExtension {
             .map(|arr| arr.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
             .unwrap_or_default();
 
+        let adapter_cwd = Path::new(&adapter_path)
+            .parent()
+            .map(|p| p.to_string_lossy().into_owned())
+            .filter(|s| !s.is_empty());
+
         let mut arguments = if adapter_in_args { vec![adapter_path] } else { vec![] };
         arguments.extend(raw_args);
+
+        let envs = vec![
+            ("DOTNET_CLI_TELEMETRY_OPTOUT".to_string(), "1".to_string()),
+            ("DOTNET_SKIP_FIRST_TIME_EXPERIENCE".to_string(), "1".to_string()),
+            ("DOTNET_NOLOGO".to_string(), "1".to_string()),
+        ];
 
         Ok(DebugAdapterBinary {
             command: Some(command),
             arguments,
-            envs: vec![],
-            cwd: None,
+            envs,
+            cwd: adapter_cwd,
             connection,
             request_args: StartDebuggingRequestArguments {
                 configuration: adapter_config,
