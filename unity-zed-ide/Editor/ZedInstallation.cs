@@ -638,13 +638,33 @@ namespace Unifan.Zed.Editor
 				normalizedPath = fullPath.NormalizePathSeparators();
 			}
 
-			// Always pass the absolute project directory first so Zed uses it as the workspace root,
-			// followed by the absolute file:line:column target with matching native separators.
-			var arguments = string.IsNullOrEmpty(normalizedPath)
-				? $"\"{directory}\""
-				: $"\"{directory}\" \"{normalizedPath}:{line}:{column}\"";
+			if (string.IsNullOrEmpty(normalizedPath))
+			{
+				ProcessRunner.Start(ProcessStartInfoFor(application, $"\"{directory}\""));
+				return true;
+			}
 
-			ProcessRunner.Start(ProcessStartInfoFor(application, arguments));
+			// In Zed, passing "<directory>" and "<file:line:col>" in a single CLI command
+			// causes Zed to register a multi-root workspace with "<file>" as an isolated
+			// single-file worktree (breaking Roslyn solution loading).
+			// Instead, ensure the folder workspace is opened first, then open the file inside it.
+			System.Threading.Tasks.Task.Run(() =>
+			{
+				try
+				{
+					using (var folderProcess = Process.Start(ProcessStartInfoFor(application, $"\"{directory}\"")))
+					{
+						folderProcess?.WaitForExit(5000);
+					}
+				}
+				catch
+				{
+					// ignore and proceed to open file
+				}
+
+				ProcessRunner.Start(ProcessStartInfoFor(application, $"\"{normalizedPath}:{line}:{column}\""));
+			});
+
 			return true;
 		}
 
