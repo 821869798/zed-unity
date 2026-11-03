@@ -1,0 +1,34 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["request"],
+  "properties": {
+    "request": {
+      "type": "string",
+      "const": "attach"
+    },
+    "projectPath": {
+      "type": "string",
+      "description": "Absolute path to the Unity project root. Defaults to the Zed workspace root.",
+      "default": "${ZED_WORKTREE_ROOT}"
+    },
+    "endPoint": {
+      "type": "string",
+      "description": "host:port of Unity's Mono SDB debugger, e.g. \"127.0.0.1:56286\". If omitted, port discovery will attempt to find it automatically."
+    },
+    "logFile": {
+      "type": "string",
+      "description": "Optional path to write the debug adapter log file."
+    },
+    "adapterPath": {
+      "type": "string",
+      "description": "Absolute path to the debug adapter assembly. .dll files are run via dotnet; .exe files are run natively on Windows or via Mono on Unix."
+    },
+    "adapterArgs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Extra CLI arguments passed to the adapter executable."
+    }
+  },
+  "additionalProperties": false
+}

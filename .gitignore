@@ -1,0 +1,24 @@
+# References (local clones for analysis)
+/references/
+
+# Rust / Zed Extension
+**/target/
+**/*.rs.bk
+Cargo.lock
+
+# C# / Unity / .NET
+**/[Bb]in/
+**/[Oo]bj/
+**/*.user
+**/*.userprefs
+**/*.pidb
+**/*.suo
+**/*.userosv
+**/*.sln.docstates
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
+.zed/
