@@ -1,11 +1,11 @@
 {
   "name": "com.unifan.ide.zed",
-  "displayName": "Zed Editor Integration",
-  "description": "External code editor integration for Zed in Unity. Provides automatic installation discovery, accurate file:line:column navigation, and .sln / .csproj project generation for C# language server intelligence.",
+  "displayName": "Zed Editor",
+  "description": "Code editor integration for supporting Zed as code editor for Unity. Based on com.unity.ide.visualstudio@2.0.29, adds support for SDK-style csproj generation, Unity Roslyn analyzers, MSBuild pipeline integration, auto discovery of Zed installations, and automatic .zed/settings.json & .zed/debug.json generation.",
   "version": "1.0.0",
-  "unity": "2019.4",
+  "unity": "2021.3",
+  "dependencies": {},
   "author": {
     "name": "Unifan"
-  },
-  "dependencies": {}
+  }
 }

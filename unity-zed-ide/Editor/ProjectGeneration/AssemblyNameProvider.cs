@@ -1,3 +1,9 @@
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Unity Technologies.
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+#if !UNITY_MSBUILD_ENABLED
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -5,85 +11,124 @@ using UnityEditor;
 using UnityEditor.Compilation;
 using UnityEditor.PackageManager;
 
-namespace ZedEditor
+namespace Unifan.Zed.Editor
 {
-    public interface IAssemblyNameProvider
-    {
-        string[] ProjectSupportedExtensions { get; }
-        ProjectGenerationFlag ProjectGenerationFlag { get; }
-        string GetAssemblyNameFromScriptPath(string path);
-        IEnumerable<Assembly> GetAssemblies(Func<string, bool> shouldFileBePartOfSolution);
-        IEnumerable<string> GetAllAssetPaths();
-        IEnumerable<string> GetRoslynAnalyzerPaths();
-        UnityEditor.PackageManager.PackageInfo FindForAssetPath(string assetPath);
-        ResponseFileData ParseResponseFile(string responseFilePath, string projectDirectory, string[] systemReferenceDirectories);
-        bool IsInternalizedPackagePath(string path);
-        void ToggleProjectGeneration(ProjectGenerationFlag preference);
-    }
+	public interface IAssemblyNameProvider
+	{
+		string[] ProjectSupportedExtensions { get; }
+		string ProjectGenerationRootNamespace { get; }
+		ProjectGenerationFlag ProjectGenerationFlag { get; }
 
-    internal interface IPackageInfoCache{
-        void ResetPackageInfoCache();
-    }
+		string GetAssemblyNameFromScriptPath(string path);
+		string GetAssemblyName(string assemblyOutputPath, string assemblyName);
+		bool IsInternalizedPackagePath(string path);
+		IEnumerable<Assembly> GetAssemblies(Func<string, bool> shouldFileBePartOfSolution);
+		IEnumerable<string> GetAllAssetPaths();
+		UnityEditor.PackageManager.PackageInfo FindForAssetPath(string assetPath);
+		ResponseFileData ParseResponseFile(string responseFilePath, string projectDirectory, string[] systemReferenceDirectories);
+		void ToggleProjectGeneration(ProjectGenerationFlag preference);
+	}
 
-    internal class AssemblyNameProvider : IAssemblyNameProvider, IPackageInfoCache
-    {
-        private readonly Dictionary<string, UnityEditor.PackageManager.PackageInfo> m_PackageInfoCache = new Dictionary<string, UnityEditor.PackageManager.PackageInfo>();
+	public class AssemblyNameProvider : IAssemblyNameProvider
+	{
+		private readonly Dictionary<string, UnityEditor.PackageManager.PackageInfo> m_PackageInfoCache = new Dictionary<string, UnityEditor.PackageManager.PackageInfo>();
 
-        ProjectGenerationFlag m_ProjectGenerationFlag = (ProjectGenerationFlag)EditorPrefs.GetInt("unity_project_generation_flag", 0);
+		ProjectGenerationFlag m_ProjectGenerationFlag = (ProjectGenerationFlag)EditorPrefs.GetInt(
+			"unity_project_generation_flag",
+			(int)(ProjectGenerationFlag.Local | ProjectGenerationFlag.Embedded));
 
-        public string[] ProjectSupportedExtensions => EditorSettings.projectGenerationUserExtensions;
+		public string[] ProjectSupportedExtensions => EditorSettings.projectGenerationUserExtensions;
 
-        public ProjectGenerationFlag ProjectGenerationFlag
-        {
-            get => m_ProjectGenerationFlag;
-            private set
-            {
-                EditorPrefs.SetInt("unity_project_generation_flag", (int)value);
-                m_ProjectGenerationFlag = value;
-            }
-        }
+		public string ProjectGenerationRootNamespace => EditorSettings.projectGenerationRootNamespace;
 
-        public string GetAssemblyNameFromScriptPath(string path)
-        {
-            return CompilationPipeline.GetAssemblyNameFromScriptPath(path);
-        }
-
-        public IEnumerable<Assembly> GetAssemblies(Func<string, bool> shouldFileBePartOfSolution)
-        {
-            return CompilationPipeline.GetAssemblies()
-                .Where(i => 0 < i.sourceFiles.Length && i.sourceFiles.Any(shouldFileBePartOfSolution));
-        }
-
-        public IEnumerable<string> GetAllAssetPaths()
-        {
-            return AssetDatabase.GetAllAssetPaths();
-        }
-
-        private static string ResolvePotentialParentPackageAssetPath(string assetPath)
+		public ProjectGenerationFlag ProjectGenerationFlag
 		{
-            const string packagesPrefix = "packages/";
-            if (!assetPath.StartsWith(packagesPrefix, StringComparison.OrdinalIgnoreCase))
-            {
-                return null;
-            }
-
-            var followupSeparator = assetPath.IndexOf('/', packagesPrefix.Length);
-            if (followupSeparator == -1)
-            {
-                return assetPath.ToLowerInvariant();
-            }
-
-            return assetPath.Substring(0, followupSeparator).ToLowerInvariant();
+			get { return ProjectGenerationFlagImpl; }
+			private set { ProjectGenerationFlagImpl = value;}
 		}
 
-        public void ResetPackageInfoCache()
+		internal virtual ProjectGenerationFlag ProjectGenerationFlagImpl
 		{
-			m_PackageInfoCache.Clear();
+			get => m_ProjectGenerationFlag;
+			private set
+			{
+				EditorPrefs.SetInt("unity_project_generation_flag", (int)value);
+				m_ProjectGenerationFlag = value;
+			}
 		}
 
-        public UnityEditor.PackageManager.PackageInfo FindForAssetPath(string assetPath)
-        {
-            var parentPackageAssetPath = ResolvePotentialParentPackageAssetPath(assetPath);
+		public string GetAssemblyNameFromScriptPath(string path)
+		{
+			return CompilationPipeline.GetAssemblyNameFromScriptPath(path);
+		}
+
+		internal static readonly string AssemblyOutput = @"Temp\bin\Debug\".NormalizePathSeparators();
+		internal static readonly string PlayerAssemblyOutput = @"Temp\bin\Debug\Player\".NormalizePathSeparators();
+
+		public IEnumerable<Assembly> GetAssemblies(Func<string, bool> shouldFileBePartOfSolution)
+		{
+			IEnumerable<Assembly> assemblies = GetAssembliesByType(AssembliesType.Editor, shouldFileBePartOfSolution, AssemblyOutput);
+
+			if (!ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.PlayerAssemblies))
+			{
+				return assemblies;
+			}
+			var playerAssemblies = GetAssembliesByType(AssembliesType.Player, shouldFileBePartOfSolution, PlayerAssemblyOutput);
+			return assemblies.Concat(playerAssemblies);
+		}
+
+		private static IEnumerable<Assembly> GetAssembliesByType(AssembliesType type, Func<string, bool> shouldFileBePartOfSolution, string outputPath)
+		{
+			foreach (var assembly in CompilationPipeline.GetAssemblies(type))
+			{
+				if (assembly.sourceFiles.Any(shouldFileBePartOfSolution))
+				{
+					yield return new Assembly(
+						assembly.name,
+						outputPath,
+						assembly.sourceFiles,
+						assembly.defines,
+						assembly.assemblyReferences,
+						assembly.compiledAssemblyReferences,
+						assembly.flags,
+						assembly.compilerOptions,
+						assembly.rootNamespace
+					);
+				}
+			}
+		}
+
+		public string GetCompileOutputPath(string assemblyName)
+		{
+			// We need to keep this one for API surface check (AssemblyNameProvider is public), but not used anymore
+			throw new NotImplementedException();
+		}
+
+		public IEnumerable<string> GetAllAssetPaths()
+		{
+			return AssetDatabase.GetAllAssetPaths();
+		}
+
+		private static string ResolvePotentialParentPackageAssetPath(string assetPath)
+		{
+			const string packagesPrefix = "packages/";
+			if (!assetPath.StartsWith(packagesPrefix, StringComparison.OrdinalIgnoreCase))
+			{
+				return null;
+			}
+
+			var followupSeparator = assetPath.IndexOf('/', packagesPrefix.Length);
+			if (followupSeparator == -1)
+			{
+				return assetPath.ToLowerInvariant();
+			}
+
+			return assetPath.Substring(0, followupSeparator).ToLowerInvariant();
+		}
+
+		public UnityEditor.PackageManager.PackageInfo FindForAssetPath(string assetPath)
+		{
+			var parentPackageAssetPath = ResolvePotentialParentPackageAssetPath(assetPath);
 			if (parentPackageAssetPath == null)
 			{
 				return null;
@@ -97,69 +142,79 @@ namespace ZedEditor
 			var result = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(parentPackageAssetPath);
 			m_PackageInfoCache[parentPackageAssetPath] = result;
 			return result;
-        }
+		}
 
-        public ResponseFileData ParseResponseFile(string responseFilePath, string projectDirectory, string[] systemReferenceDirectories)
-        {
-            return CompilationPipeline.ParseResponseFile(
-                responseFilePath,
-                projectDirectory,
-                systemReferenceDirectories
-            );
-        }
+		public bool IsInternalizedPackagePath(string path)
+		{
+			if (string.IsNullOrEmpty(path.Trim()))
+			{
+				return false;
+			}
+			var packageInfo = FindForAssetPath(path);
+			if (packageInfo == null)
+			{
+				return false;
+			}
+			var packageSource = packageInfo.source;
+			switch (packageSource)
+			{
+				case PackageSource.Embedded:
+					return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Embedded);
+				case PackageSource.Registry:
+					return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Registry);
+				case PackageSource.BuiltIn:
+					return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.BuiltIn);
+				case PackageSource.Unknown:
+					return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Unknown);
+				case PackageSource.Local:
+					return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Local);
+				case PackageSource.Git:
+					return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Git);
+				case PackageSource.LocalTarball:
+					return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.LocalTarBall);
+			}
 
-        public bool IsInternalizedPackagePath(string path)
-        {
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                return false;
-            }
-            var packageInfo = FindForAssetPath(path);
-            if (packageInfo == null)
-            {
-                return false;
-            }
-            var packageSource = packageInfo.source;
-            switch (packageSource)
-            {
-                case PackageSource.Embedded:
-                    return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Embedded);
-                case PackageSource.Registry:
-                    return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Registry);
-                case PackageSource.BuiltIn:
-                    return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.BuiltIn);
-                case PackageSource.Unknown:
-                    return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Unknown);
-                case PackageSource.Local:
-                    return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Local);
-                case PackageSource.Git:
-                    return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.Git);
-#if UNITY_2019_3_OR_NEWER
-                case PackageSource.LocalTarball:
-                    return !ProjectGenerationFlag.HasFlag(ProjectGenerationFlag.LocalTarBall);
-#endif
-            }
+			return false;
+		}
 
-            return false;
-        }
+		public ResponseFileData ParseResponseFile(string responseFilePath, string projectDirectory, string[] systemReferenceDirectories)
+		{
+			return CompilationPipeline.ParseResponseFile(
+			  responseFilePath,
+			  projectDirectory,
+			  systemReferenceDirectories
+			);
+		}
 
-        public void ToggleProjectGeneration(ProjectGenerationFlag preference)
-        {
-            if (ProjectGenerationFlag.HasFlag(preference))
-            {
-                ProjectGenerationFlag ^= preference;
-            }
-            else
-            {
-                ProjectGenerationFlag |= preference;
-            }
-        }
+		public void ToggleProjectGeneration(ProjectGenerationFlag preference)
+		{
+			if (ProjectGenerationFlag.HasFlag(preference))
+			{
+				ProjectGenerationFlag ^= preference;
+			}
+			else
+			{
+				ProjectGenerationFlag |= preference;
+			}
+		}
 
-        public IEnumerable<string> GetRoslynAnalyzerPaths()
-        {
-            return PluginImporter.GetAllImporters()
-                .Where(i => !i.isNativePlugin && AssetDatabase.GetLabels(i).SingleOrDefault(l => l == "RoslynAnalyzer") != null)
-                .Select(i => i.assetPath);
-        }
-    }
+		internal void ResetPackageInfoCache()
+		{
+			m_PackageInfoCache.Clear();
+		}
+
+		public void ResetProjectGenerationFlag()
+		{
+			ProjectGenerationFlag = ProjectGenerationFlag.None;
+		}
+
+		public string GetAssemblyName(string assemblyOutputPath, string assemblyName)
+		{
+			if (assemblyOutputPath == PlayerAssemblyOutput)
+				return assemblyName + ".Player";
+
+			return assemblyName;
+		}
+	}
 }
+#endif
