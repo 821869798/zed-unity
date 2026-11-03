@@ -11,15 +11,56 @@
   <a href="https://github.com/821869798/zed-unity/releases"><img src="https://img.shields.io/github/v/release/821869798/zed-unity?color=green" alt="Release"></a>
 </p>
 
-A modern, production-ready dual-component integration suite (monorepo) designed for smooth development and debugging of **Unity C#** projects inside **[Zed Editor](https://zed.dev/)**.
+A modern, production-ready dual-component integration suite designed for smooth development and debugging of **Unity C#** projects inside **[Zed Editor](https://zed.dev/)**.
 
-The suite consists of two complementary subprojects:
-1. **`unity-zed-ide`** (`com.unifan.ide.zed`): A Unity Editor UPM package based on Unity's official **`com.unity.ide.visualstudio@2.0.29`** architecture, completely refactored and tailored for Zed's Roslyn LSP and workspace mechanics.
-2. **`zed-unity-debug`** (`unity-debugger`): A native Zed DAP debugging extension built in Rust / WebAssembly, connecting directly to Visual Studio Tools for Unity DAP services.
+The suite consists of two complementary components:
+1. **`unity-zed-ide`** (`com.unifan.ide.zed`): Unity Editor UPM package based on Unity's official `com.unity.ide.visualstudio@2.0.29` architecture, tailored for Zed's Roslyn LSP.
+2. **`zed-unity-debug`** (`unity-debug`): Zed native DAP debugging extension built in Rust / WebAssembly, connecting directly to Visual Studio Tools for Unity DAP services.
 
 ---
 
-## Why Zed Unity Suite?
+## ⚡ Quick Start
+
+### 1. Install Unity Package (`unity-zed-ide`)
+
+In your Unity Editor:
+1. Open **Window > Package Manager**.
+2. Click **`+`** (top-left) > **Add package from git URL...**.
+3. Paste:
+   ```text
+   https://github.com/821869798/zed-unity.git?path=/unity-zed-ide
+   ```
+
+*(Alternatively, add `"com.unifan.ide.zed": "https://github.com/821869798/zed-unity.git?path=/unity-zed-ide"` to your `Packages/manifest.json`)*
+
+### 2. Set Zed as External Script Editor
+1. In Unity, go to **Edit > Preferences > External Tools**.
+2. Under **External Script Editor**, select **`Zed [Version]`** (auto-detected).
+3. Recommended: check **Embedded packages** and **Local packages**.
+4. Double-click any C# script in Unity. Unity will launch Zed and automatically generate clean SDK-style `.csproj` files, a unified `.sln`, and `.zed` configurations.
+
+### 3. Install Zed Extensions
+1. In Zed, open Extensions and install the official **`C#`** extension (provides Roslyn completion, diagnostics, and code navigation).
+2. Install the **`unity-debug`** extension:
+   * Once merged into Zed's official registry, search for **`Unity Debugger`** in Zed's Extension Manager.
+   * Or install locally: press `Ctrl + Shift + P` (`Cmd + Shift + P` on macOS) > run **`zed: install dev extension`** > select the `zed-unity-debug` folder.
+
+---
+
+## 🐞 Daily Debugging Workflow
+
+1. Keep your Unity project running in the Editor.
+2. In Zed, press **`F4`** (or open the Debug panel at the bottom-left and click Play) and select **`Attach to Unity Editor`**.
+3. Set breakpoints on any C# line (`F9` or click the gutter next to the line number).
+4. In Unity, enter Play mode. When the breakpoint is hit, Zed pauses execution.
+5. **Inspect variables**:
+   * **Hover over variables** directly in the editor to view runtime values.
+   * Expand complex object graphs and locals in the **Variables panel**.
+   * Add persistent expressions to the **Watch panel**.
+
+---
+
+## 💡 Why Zed Unity Suite?
 
 | Pain Point in Traditional Setup | How Zed Unity Suite Solves It |
 | :--- | :--- |
@@ -31,7 +72,26 @@ The suite consists of two complementary subprojects:
 
 ---
 
-## Directory Structure
+## 🔍 Features in Depth
+
+### 1. Modern Project Generation (`unity-zed-ide`)
+* **Modern SDK-Style Projects**: Generates clean SDK-style `.csproj` files with full support for C# 11–13 features, `<Nullable>enable</Nullable>`, and Unity 6+ MSBuild pipelines.
+* **Roslyn Analyzers Injection**: Automatically scans local storage for `Microsoft.Unity.Analyzers.dll` and `Unity.SourceGenerators.dll`, injecting them into generated project files to provide real-time Unity diagnostic warnings and performance suggestions.
+* **Cold-Start Race Prevention**: On cold starts (when Zed is not running), `ZedInstallation` opens the project root folder first, allows 1.5 seconds for Zed's background thread to scan the initial file tree, and then opens the target script. This prevents Zed from treating the target file as an isolated single-file workspace root.
+* **Automated `.zed` Workspace Config**: Generates `.zed/settings.json` (excluding heavy directories like `Library/`, `Temp/`, `Logs/` and setting Unity file associations) and `.zed/debug.json` (with ready-to-run attach configuration).
+
+### 2. Production-Grade Debugging (`zed-unity-debug`)
+* **Accurate Port Resolution**: Multi-instance aware. Reads `Library/EditorInstance.json` to extract the exact Unity Editor PID and binds to `56000 + (PID % 1000)`.
+* **Auto-Discovery & Fallback Download**: Reuses existing `visualstudiotoolsforunity.vstuc` installations (from VS Code, Cursor, Antigravity, etc.). If none exist, automatically downloads the official release from GitHub into the extension workspace.
+* **Full DAP Capabilities**:
+  * Breakpoints (`F9`), Continue (`F5`), Step Over (`F10`), Step Into (`F11`), Step Out (`Shift + F11`).
+  * **Variables Panel**: Interactive tree of `Locals`, arguments, and `this` object graphs.
+  * **Debugger Hover**: Hovering over variables while paused displays real-time runtime values.
+  * **Watch Expressions**: Supports adding persistent watch expressions that recalculate on every step.
+
+---
+
+## 📁 Directory Structure
 
 ```text
 zed-unity/
@@ -68,83 +128,7 @@ zed-unity/
 
 ---
 
-## Quick Start
-
-### 1. Install Unity Package (`unity-zed-ide`)
-
-Choose one of the following methods in your Unity project:
-
-#### Option A: Via Unity Package Manager Git URL (Recommended)
-1. In Unity, open **Window > Package Manager**.
-2. Click the **`+`** button in the top-left and select **Add package from git URL...**.
-3. Enter:
-   ```text
-   https://github.com/821869798/zed-unity.git?path=/unity-zed-ide
-   ```
-
-#### Option B: Edit `Packages/manifest.json` directly
-```json
-{
-  "dependencies": {
-    "com.unifan.ide.zed": "https://github.com/821869798/zed-unity.git?path=/unity-zed-ide"
-  }
-}
-```
-
-#### Option C: Local Path Reference
-```json
-{
-  "dependencies": {
-    "com.unifan.ide.zed": "file:D:/path/to/zed-unity/unity-zed-ide"
-  }
-}
-```
-
-### 2. Configure Unity External Script Editor
-1. In Unity, go to **Edit > Preferences > External Tools**.
-2. Under **External Script Editor**, select **`Zed [Version]`** (automatically detected).
-3. Check the project generation options (recommended: **Embedded packages** and **Local packages**).
-4. Double-click any C# script in the Project window. Unity will launch Zed, generating `.sln`, SDK-style `.csproj` files, and `.zed` configurations automatically.
-
-### 3. Install Zed Extensions
-1. Install the official **`C#`** extension from Zed's Extension Manager (for Roslyn syntax highlighting, diagnostics, and code navigation).
-2. Install the **`unity-debugger`** extension:
-   - In Zed, press `Ctrl + Shift + P` (`Cmd + Shift + P` on macOS) to open the command palette.
-   - Run **`zed: install dev extension`**.
-   - Select the `zed-unity-debug` directory. Zed will build/load the extension automatically.
-
----
-
-## Features in Depth
-
-### 1. Modern Project Generation (`unity-zed-ide`)
-* **Modern SDK-Style Projects**: Generates clean SDK-style `.csproj` files with full support for C# 11–13 features, `<Nullable>enable</Nullable>`, and Unity 6+ MSBuild pipelines.
-* **Roslyn Analyzers Injection**: Automatically scans local storage for `Microsoft.Unity.Analyzers.dll` and `Unity.SourceGenerators.dll`, injecting them into generated project files to provide real-time Unity diagnostic warnings and performance suggestions.
-* **Cold-Start Race Prevention**: On cold starts (when Zed is not running), `ZedInstallation` opens the project root folder first, allows 1.5 seconds for Zed's background thread to scan the initial file tree, and then opens the target script. This prevents Zed from treating the target file as an isolated single-file workspace root.
-* **Automated `.zed` Workspace Config**: Generates `.zed/settings.json` (excluding heavy directories like `Library/`, `Temp/`, `Logs/` and setting Unity file associations) and `.zed/debug.json` (with ready-to-run attach configuration).
-
-### 2. Production-Grade Debugging (`zed-unity-debug`)
-* **Accurate Port Resolution**: Multi-instance aware. Reads `Library/EditorInstance.json` to extract the exact Unity Editor PID and binds to `56000 + (PID % 1000)`.
-* **Auto-Discovery & Fallback Download**: Reuses existing `visualstudiotoolsforunity.vstuc` installations (from VS Code, Cursor, Antigravity, etc.). If none exist, automatically downloads the official release from GitHub into the extension workspace.
-* **Full DAP Capabilities**:
-  * Breakpoints (`F9`), Continue (`F5`), Step Over (`F10`), Step Into (`F11`), Step Out (`Shift + F11`).
-  * **Variables Panel**: Interactive tree of `Locals`, arguments, and `this` object graphs.
-  * **Debugger Hover**: Hovering over variables while paused displays real-time runtime values.
-  * **Watch Expressions**: Supports adding persistent watch expressions that recalculate on every step.
-
----
-
-## Daily Debugging Workflow
-
-1. Keep your Unity project running in the Editor.
-2. In Zed, press **`F4`** (or open the Debug panel in the bottom-left corner) and select **`Attach to Unity Editor`**.
-3. Set breakpoints in C# scripts (`F9` or click next to the line number).
-4. In Unity, enter Play mode. When the breakpoint is hit, Zed pauses execution.
-5. Inspect variable values directly on mouse hover or expand object graphs in the **Variables** panel.
-
----
-
-## FAQ & Troubleshooting
+## ❓ FAQ & Troubleshooting
 
 #### Q: Why does cross-file navigation take a few seconds when opening Zed on a cold start?
 > **A:** When opening a project with 50+ assemblies on cold start, the Roslyn language server initializes in the background. Check the **`roslyn`** indicator in the bottom status bar. Once initialization finishes (~5-7 seconds), all symbol navigation and completions are instant.

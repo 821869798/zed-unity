@@ -13,13 +13,54 @@
 
 专为在 **[Zed Editor](https://zed.dev/)** 中流畅开发与调试 **Unity C#** 项目打造的现代化双端生产级套件（Monorepo）。
 
-本套件由两个协同子项目组成：
-1. **`unity-zed-ide`**（`com.unifan.ide.zed`）：Unity Editor 外部代码编辑器集成插件（UPM Package）。基于 Unity 官方最新的 **`com.unity.ide.visualstudio@2.0.29`** 架构深度重构，专为 Zed 的 Roslyn LSP 与工作区机制深度定制。
-2. **`zed-unity-debug`**（`unity-debugger`）：Zed 原生调试扩展（Rust / WebAssembly DAP Adapter）。无缝对接 Visual Studio Tools for Unity 调试服务。
+本套件由两个协同组件组成：
+1. **`unity-zed-ide`**（`com.unifan.ide.zed`）：Unity Editor 外部代码编辑器集成插件（UPM Package）。基于 Unity 官方最新的 `com.unity.ide.visualstudio@2.0.29` 架构深度重构，专为 Zed 的 Roslyn 语言服务深度定制。
+2. **`zed-unity-debug`**（`unity-debug`）：Zed 原生调试扩展（Rust / WebAssembly DAP Adapter）。无缝对接 Visual Studio Tools for Unity 调试服务。
 
 ---
 
-## 为什么选择 Zed Unity Suite？
+## ⚡ 快速上手（Quick Start）
+
+### 1. 安装 Unity 插件 (`unity-zed-ide`)
+
+在你的 Unity 编辑器中：
+1. 点击菜单栏 **Window > Package Manager**。
+2. 点击左上角的 **`+`** 按钮，选择 **Add package from git URL...**。
+3. 输入以下地址并点击 **Add**：
+   ```text
+   https://github.com/821869798/zed-unity.git?path=/unity-zed-ide
+   ```
+
+*(也可以直接在 Unity 工程的 `Packages/manifest.json` 中加入 `"com.unifan.ide.zed": "https://github.com/821869798/zed-unity.git?path=/unity-zed-ide"`)*
+
+### 2. 配置 Unity 外部编辑器
+1. 打开 Unity 菜单 **Edit > Preferences > External Tools**。
+2. 在 **External Script Editor** 下拉列表中选择 **`Zed [版本号]`**（插件会自动探测你安装的 Zed 或 Zed Preview）。
+3. 推荐勾选 **Embedded packages** 和 **Local packages**。
+4. 在 Project 窗口双击任意 C# 脚本，Unity 将自动调用 Zed 并打开脚本，同时生成干净轻量的 SDK-style `.csproj`、统一的 `.sln` 以及自动配置好的 `.zed` 环境。
+
+### 3. 安装 Zed 扩展
+1. 在 Zed 中打开扩展中心，安装官方 **`C#`** 扩展（提供 Roslyn 语法高亮、代码补全与跨文件跳转）。
+2. 安装 **`unity-debug`** 扩展：
+   * 官方扩展仓库合并后，可在 Zed 扩展中心直接搜索并安装 **`Unity Debugger`**；
+   * 本地安装：按 `Ctrl + Shift + P`（macOS: `Cmd + Shift + P`）> 选择 **`zed: install dev extension`** > 选择本仓库的 `zed-unity-debug` 目录。
+
+---
+
+## 🐞 日常调试流程
+
+1. 保持 Unity 项目处于打开状态。
+2. 在 Zed 中按 **`F4`**（或点击左下角调试小虫子面板中的运行按钮），选择 **`Attach to Unity Editor`**。
+3. 在 C# 代码中按 **`F9`** 或点击行号左侧红点设置断点。
+4. 切回 Unity 点击 Play 运行，触发代码即刻在 Zed 中命中并暂停。
+5. **观测变量**：
+   * **鼠标悬停**：直接悬停在变量上查看运行时数值卡片；
+   * **Variables 面板**：在底部/侧边面板层级展开查看当前方法的作用域局部变量与 `this` 对象树；
+   * **Watch 监视**：在调试面板中添加需要持续关注的复杂属性表达式。
+
+---
+
+## 💡 为什么选择 Zed Unity Suite？
 
 | 传统集成方案的痛点 | Zed Unity Suite 的解决方案 |
 | :--- | :--- |
@@ -31,7 +72,26 @@
 
 ---
 
-## 目录结构
+## 🔍 核心特性详解
+
+### 1. 现代化项目生成与语言服务体验 (`unity-zed-ide`)
+* **现代 SDK 风格项目生成**：生成纯净标准、结构紧凑的 SDK 风格 `.csproj`，全面支持 C# 11~13 语法特性、`<Nullable>enable</Nullable>` 以及 Unity 6+ 的 MSBuild 管线。
+* **Roslyn Analyzers 自动绑定**：自动扫描本地环境（Zed 插件缓存、VS Code 扩展目录、Visual Studio 目录）中的 `Microsoft.Unity.Analyzers.dll` 与 `Unity.SourceGenerators.dll`，在项目生成时直接注入到 `.csproj`，提供官方级的 Unity 专属代码诊断与性能优化建议。
+* **冷启动时序智能防护**：深度适配 Zed 1.26+ 的命令行行为。在 Zed 关闭状态下双击脚本时，插件先在后台拉起工程根目录，并等待初次文件树扫描完成后，再精准跳转目标代码与行号，彻底杜绝孤立单文件根节点导致的 Roslyn 崩溃。
+* **全自动化环境维护**：自动剔除冲突的 `.slnx` 文件，并在 `.zed/settings.json` 中自动锁定主 `.sln`，屏蔽 `Library`、`Temp`、`Logs` 等巨型临时目录的监听与检索，大幅提升 Zed 运行性能。
+
+### 2. 生产级调试体验 (`zed-unity-debug`)
+* **多实例精准端口绑定**：多开 Unity 项目时，扩展优先读取项目根目录下 `Library/EditorInstance.json` 中当前编辑器实例的精确 `process_id`，严格按 Unity 标准公式 `56000 + (process_id % 1000)` 计算目标端口，连接绝不串台。
+* **自动探知与静默下载适配器**：无需在 `.zed/debug.json` 中手动硬编码调试器路径。扩展会自动复用本地已有的 `visualstudiotoolsforunity.vstuc` 适配器（如已安装过 VS Code 或 Cursor 扩展）；若未检测到，会自动从 GitHub Release 官方发布源静默下载解压至扩展隔离区。
+* **全功能断点与变量检查**：
+  - 断点命中、单步跳过（F10）、单步进入（F11）、单步跳出（Shift+F11）。
+  - **Variables 面板**：层级展示 `Locals`（局部变量）、参数、`this` 以及复杂的嵌套对象图。
+  - **Debugger Hover 悬停取值**：断点暂停时，鼠标悬停在变量上即可直接弹出实时数值卡片。
+  - **Watch 监视**：在调试面板中支持添加自定义监视表达式。
+
+---
+
+## 📁 目录结构
 
 ```text
 zed-unity/
@@ -68,85 +128,7 @@ zed-unity/
 
 ---
 
-## 快速上手（Quick Start）
-
-### 1. 安装 Unity 插件 (`unity-zed-ide`)
-
-选择以下任一方式将插件添加到你的 Unity 项目中：
-
-#### 方式 A：通过 Unity Package Manager Git URL 安装（推荐）
-1. 在 Unity 中打开 **Window > Package Manager**。
-2. 点击左上角的 **`+`** 按钮，选择 **Add package from git URL...**。
-3. 输入以下地址并点击 **Add**：
-   ```text
-   https://github.com/821869798/zed-unity.git?path=/unity-zed-ide
-   ```
-
-#### 方式 B：直接编辑 `Packages/manifest.json`
-```json
-{
-  "dependencies": {
-    "com.unifan.ide.zed": "https://github.com/821869798/zed-unity.git?path=/unity-zed-ide"
-  }
-}
-```
-
-#### 方式 C：本地路径引入 (Local Package)
-```json
-{
-  "dependencies": {
-    "com.unifan.ide.zed": "file:D:/path/to/zed-unity/unity-zed-ide"
-  }
-}
-```
-
-### 2. 配置 Unity 外部编辑器
-1. 打开 Unity 菜单 **Edit > Preferences > External Tools**。
-2. 在 **External Script Editor** 下拉列表中选择 **`Zed [版本号]`**（插件会自动探测你安装的 Zed 或 Zed Preview）。
-3. 勾选需要生成的项目类型（推荐勾选 **Embedded packages** 和 **Local packages**）。
-4. 在 Project 窗口双击任意 C# 脚本，Unity 将自动调用 Zed 并打开脚本，同时生成完整的项目工程文件与配置。
-
-### 3. 安装 Zed 扩展
-1. 在 Zed 中安装官方 **`C#`** 扩展（用于 Roslyn 语法高亮、代码补全与跨文件跳转）。
-2. 在 Zed 中安装 **`unity-debugger`** 扩展：
-   - 按快捷键 `Ctrl + Shift + P`（macOS: `Cmd + Shift + P`）打开命令面板。
-   - 输入并运行 **`zed: install dev extension`**。
-   - 选择本仓库中的 `zed-unity-debug` 目录，Zed 将自动加载并启用调试器。
-
----
-
-## 核心特性详解
-
-### 1. 现代化项目生成与语言服务体验 (`unity-zed-ide`)
-* **现代 SDK 风格项目生成**：生成纯净标准、结构紧凑的 SDK 风格 `.csproj`，全面支持 C# 11~13 语法特性、`<Nullable>enable</Nullable>` 以及 Unity 6+ 的 MSBuild 管线。
-* **Roslyn Analyzers 自动绑定**：自动扫描本地环境（Zed 插件缓存、VS Code 扩展目录、Visual Studio 目录）中的 `Microsoft.Unity.Analyzers.dll` 与 `Unity.SourceGenerators.dll`，在项目生成时直接注入到 `.csproj`，提供官方级的 Unity 专属代码诊断与性能优化建议。
-* **冷启动时序智能防护**：深度适配 Zed 1.26+ 的命令行行为。在 Zed 关闭状态下双击脚本时，插件先在后台拉起工程根目录，并等待初次文件树扫描完成后，再精准跳转目标代码与行号，彻底杜绝孤立单文件根节点导致的 Roslyn 崩溃。
-* **全自动化环境维护**：自动剔除冲突的 `.slnx` 文件，并在 `.zed/settings.json` 中自动锁定主 `.sln`，屏蔽 `Library`、`Temp`、`Logs` 等巨型临时目录的监听与检索，大幅提升 Zed 运行性能。
-
-### 2. 生产级调试体验 (`zed-unity-debug`)
-* **多实例精准端口绑定**：多开 Unity 项目时，扩展优先读取项目根目录下 `Library/EditorInstance.json` 中当前编辑器实例的精确 `process_id`，严格按 Unity 标准公式 `56000 + (process_id % 1000)` 计算目标端口，连接绝不串台。
-* **自动探知与静默下载适配器**：无需在 `.zed/debug.json` 中手动硬编码调试器路径。扩展会自动复用本地已有的 `visualstudiotoolsforunity.vstuc` 适配器（如已安装过 VS Code 或 Cursor 扩展）；若未检测到，会自动从 GitHub Release 官方发布源静默下载解压至扩展隔离区。
-* **全功能断点与变量检查**：
-  - 断点命中、单步跳过（F10）、单步进入（F11）、单步跳出（Shift+F11）。
-  - **Variables 面板**：层级展示 `Locals`（局部变量）、参数、`this` 以及复杂的嵌套对象图。
-  - **Debugger Hover 悬停取值**：断点暂停时，鼠标悬停在变量上即可直接弹出实时数值卡片。
-  - **Watch 监视**：在调试面板中支持添加自定义监视表达式。
-
----
-
-## 日常调试流程
-
-1. **进入调试**：保持 Unity 项目运行，在 Zed 中按 **`F4`**（或点击左下角调试小虫子面板中的运行按钮），选择 **`Attach to Unity Editor`**。
-2. **设置断点**：在 C# 代码中按 **`F9`** 或点击行号左侧红点。
-3. **命中断点**：切回 Unity 点击 Play 运行，触发代码即刻在 Zed 中暂停。
-4. **查看变量**：
-   - 鼠标悬停在变量上直接查看运行时值。
-   - 在底部的 **Variables 面板** 查看所有作用域变量。
-   - 在 **Watch** 中输入需要持续观察的复杂属性表达式。
-
----
-
-## 常见问题与排查（FAQ）
+## ❓ 常见问题与排查（FAQ）
 
 #### Q: 首次从 Unity 双击脚本打开 Zed 时，为什么跨文件跳转需要等几秒？
 > **A:** 无论是 VS Code 还是 Zed，首次冷启动打开一个包含 50+ 个程序集的大型 Unity 工程时，Roslyn 语言服务器都需要加载解决方案并解析全部元数据。请观察 Zed 状态栏右下角的 **`roslyn`** 状态，大约 5~7 秒初始化完毕后，跨文件跳转与语义分析即达到毫秒级响应。
