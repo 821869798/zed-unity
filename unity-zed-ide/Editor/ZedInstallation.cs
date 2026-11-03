@@ -647,7 +647,11 @@ namespace Unifan.Zed.Editor
 			// In Zed, passing "<directory>" and "<file:line:col>" in a single CLI command
 			// causes Zed to register a multi-root workspace with "<file>" as an isolated
 			// single-file worktree (breaking Roslyn solution loading).
-			// Instead, ensure the folder workspace is opened first, then open the file inside it.
+			// Additionally, on a cold start, Zed's CLI wrapper exits as soon as the window
+			// is created (~400ms), before the background worktree scan of "<directory>"
+			// completes (~600ms). Waiting briefly before sending "<file:line:col>" ensures
+			// Zed opens the file inside the folder workspace rather than attaching a second root.
+			var isZedRunning = IsZedProcessRunning();
 			System.Threading.Tasks.Task.Run(() =>
 			{
 				try
@@ -662,10 +666,24 @@ namespace Unifan.Zed.Editor
 					// ignore and proceed to open file
 				}
 
+				System.Threading.Thread.Sleep(isZedRunning ? 200 : 1500);
 				ProcessRunner.Start(ProcessStartInfoFor(application, $"\"{normalizedPath}:{line}:{column}\""));
 			});
 
 			return true;
+		}
+
+		private static bool IsZedProcessRunning()
+		{
+			try
+			{
+				return Process.GetProcessesByName("Zed").Length > 0
+					|| Process.GetProcessesByName("zed").Length > 0;
+			}
+			catch
+			{
+				return false;
+			}
 		}
 
 		private static ProcessStartInfo ProcessStartInfoFor(string application, string arguments)
